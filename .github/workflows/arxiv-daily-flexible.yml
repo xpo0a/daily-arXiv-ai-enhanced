@@ -119,10 +119,26 @@ jobs:
 
         # Check if file is empty
         if [ ! -s "../data/${FILENAME}" ]; then
-            echo "⚠️ Crawling completed but no matching papers found"
-            echo "crawl_success=false" >> $GITHUB_OUTPUT
-            echo "crawl_filename=${FILENAME}" >> $GITHUB_OUTPUT
-            exit 0
+            echo "⚠️ No papers found in target date range, trying recent papers..."
+            
+            # Try searching recent papers (last 14 days to be more inclusive)
+            RECENT_START=$(date -d "14 days ago" +%Y-%m-%d)
+            RECENT_END=$(date +%Y-%m-%d)
+            RECENT_FILENAME="recent_${RECENT_START}_to_${RECENT_END}.jsonl"
+            
+            echo "🔍 Searching recent papers from $RECENT_START to $RECENT_END"
+            echo "📊 Using same keywords: $KEYWORDS"
+            scrapy crawl arxiv_flexible -a start_date="$RECENT_START" -a end_date="$RECENT_END" -o ../data/${RECENT_FILENAME}
+            
+            if [ -s "../data/${RECENT_FILENAME}" ]; then
+                echo "✅ Found recent papers, using recent data"
+                FILENAME="${RECENT_FILENAME}"
+            else
+                echo "⚠️ No recent papers found either"
+                echo "crawl_success=false" >> $GITHUB_OUTPUT
+                echo "crawl_filename=${FILENAME}" >> $GITHUB_OUTPUT
+                exit 0
+            fi
         fi
 
         echo "crawl_success=true" >> $GITHUB_OUTPUT

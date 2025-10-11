@@ -111,6 +111,7 @@ class ArxivFlexibleSpider(scrapy.Spider):
         self.paper_count = 0
 
         self.logger.info(f"Starting arXiv paper crawling...")
+        self.logger.info(f"Keywords: {self.keywords}")
         self.logger.info(f"Search query: {self.search_query}")
         self.logger.info(f"Date range: {self.start_date} to {self.end_date}")
         self.logger.info(f"Per page: {self.per_page}, Max pages: {self.max_pages}, Max papers: {self.max_papers}")
@@ -136,7 +137,13 @@ class ArxivFlexibleSpider(scrapy.Spider):
 
         found_in_page = 0
         stop_paging = False
-        for entry in entries:
+        total_entries = len(entries)
+        self.logger.info(f"Processing {total_entries} entries from page {page}")
+        
+        # Track date distribution for debugging
+        date_counts = {}
+        
+        for i, entry in enumerate(entries):
             # Check if reached maximum paper count limit
             if self.paper_count >= self.max_papers:
                 self.logger.info(f"Reached maximum paper limit: {self.max_papers}")
@@ -152,33 +159,59 @@ class ArxivFlexibleSpider(scrapy.Spider):
                 continue
             pub_date = pub_dt.date()
             
-            # Check if date is within target range
-            if pub_date > self.end_date:
-                continue
-            elif self.start_date <= pub_date <= self.end_date:
-                found_in_page += 1
-                self.paper_count += 1
-                arxiv_id_url = entry.xpath('*[local-name()="id"]/text()').get() or ''
-                arxiv_id = arxiv_id_url.split('/')[-1] if arxiv_id_url else None
-                
-                # Get category information
-                categories = entry.xpath('*[local-name()="category"]/@term').getall()
-                
-                yield {
-                    "id": arxiv_id,
-                    "title": entry.xpath('*[local-name()="title"]/text()').get(),
-                    "summary": entry.xpath('*[local-name()="summary"]/text()').get(),
-                    "authors": entry.xpath('*[local-name()="author"]/*[local-name()="name"]/text()').getall(),
-                    "categories": categories,
-                    self.date_field: date_text,
-                    "pdf": f"https://arxiv.org/pdf/{arxiv_id}.pdf" if arxiv_id else None,
-                    "abs": f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else None
-                }
-            elif pub_date < self.start_date:
+            # Track date distribution
+            date_str = pub_date.strftime('%Y-%m-%d')
+            date_counts[date_str] = date_counts.get(date_str, 0) + 1
+            
+            # Debug: log first few entries' dates
+            if i < 3:
+                self.logger.info(f"Entry {i+1}: date={pub_date}, target_range={self.start_date} to {self.end_date}")
+            
+        # Check if date is within target range
+        if pub_date > self.end_date:
+            continue
+        elif self.start_date <= pub_date <= self.end_date:
+            found_in_page += 1
+            self.paper_count += 1
+            arxiv_id_url = entry.xpath('*[local-name()="id"]/text()').get() or ''
+            arxiv_id = arxiv_id_url.split('/')[-1] if arxiv_id_url else None
+            
+            # Get category information
+            categories = entry.xpath('*[local-name()="category"]/@term').getall()
+            
+            yield {
+                "id": arxiv_id,
+                "title": entry.xpath('*[local-name()="title"]/text()').get(),
+                "summary": entry.xpath('*[local-name()="summary"]/text()').get(),
+                "authors": entry.xpath('*[local-name()="author"]/*[local-name()="name"]/text()').getall(),
+                "categories": categories,
+                self.date_field: date_text,
+                "pdf": f"https://arxiv.org/pdf/{arxiv_id}.pdf" if arxiv_id else None,
+                "abs": f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else None
+            }
+        elif pub_date < self.start_date:
+            # If we've gone too far back in time, stop pagination
+            # But only if we haven't found any papers yet
+            if self.paper_count == 0:
+                self.logger.warning(f"No papers found in target date range, but found papers from {pub_date}")
+                # Continue searching for a few more pages to find recent papers
+                if page >= 3:  # Search up to 3 pages if no papers found
+                    stop_paging = True
+                    break
+            else:
                 stop_paging = True
                 break
 
         self.logger.info(f"Page {page} found {found_in_page} target date papers (Total: {self.paper_count})")
+        
+        # Print date distribution for debugging
+        if date_counts:
+            self.logger.info("Date distribution in this page:")
+            sorted_dates = sorted(date_counts.items(), key=lambda x: x[0], reverse=True)
+            for date, count in sorted_dates[:10]:  # Show top 10 dates
+                self.logger.info(f"  {date}: {count} papers")
+            if len(sorted_dates) > 10:
+                self.logger.info(f"  ... and {len(sorted_dates) - 10} more dates")
 
         # Pagination logic
         if not stop_paging and len(entries) == self.per_page and self.paper_count < self.max_papers:
@@ -200,3 +233,26 @@ class ArxivFlexibleSpider(scrapy.Spider):
                 self.logger.info(f"Reached maximum paper limit ({self.max_papers}), crawling completed")
             else:
                 self.logger.info("Pagination ended, crawling completed")
+                
+        # If no papers found in target date range, try searching recent papers
+        if self.paper_count == 0 and page == 1:
+            self.logger.warning("No papers found in target date range, trying to find recent papers...")
+            # This will be handled by the fallback mechanism in the workflow
+            
+            # Also try a simpler search with broader keywords
+            self.logger.info("Trying broader keyword search...")
+            broad_keywords = ["AI", "Machine Learning", "Deep Learning", "Computer Vision", "Robotics"]
+            broad_query = generate_search_query(broad_keywords)
+            self.logger.info(f"Broad search query: {broad_query}")
+            
+            # Create a new request with broader keywords
+            broad_params = {
+                'search_query': broad_query,
+                'start': 0,
+                'max_results': self.per_page,
+                'sortBy': 'submittedDate',
+                'sortOrder': 'descending'
+            }
+            broad_url = self.base_url + urlencode(broad_params)
+            yield scrapy.Request(broad_url, callback=self.parse_api_response, 
+                               meta={'start': 0, 'page': 1, 'broad_search': True})
