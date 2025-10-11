@@ -3,7 +3,7 @@ name: arXiv-weekly-ai-enhanced
 on:
   schedule:
     # 每周一早上 8:30 UTC 运行（北京时间 16:30）
-    - cron: "30 8 * * 1"
+    - cron: "0 0 * * 1"
   workflow_dispatch:
 
 jobs:
