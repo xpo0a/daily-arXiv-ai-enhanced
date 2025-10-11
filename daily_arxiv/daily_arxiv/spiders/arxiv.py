@@ -33,26 +33,46 @@ class ArxivSpider(scrapy.Spider):
     def is_yesterday_data_ready(self, base_url: str) -> bool:
         """
         检查昨日数据是否可用。
-        逻辑：拉取最新提交的部分论文，若其中包含昨日的日期，则认为更新完成。
+        逻辑：请求最新论文，解析 <published> 字段，如果有等于昨日的日期则认为更新完成。
         """
         yesterday = (datetime.utcnow().date() - timedelta(days=1))
         params = {
             "search_query": "all",
             "sortBy": "submittedDate",
             "sortOrder": "descending",
-            "max_results": 5,
+            "max_results": 10,
         }
+    
         try:
             url = base_url + urlencode(params)
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
-            if str(yesterday) in resp.text:
-                self.logger.info(f"检测到 {yesterday} 出现于最新结果中，数据已更新。")
+    
+            # 用 XPath 解析（不依赖命名空间）
+            import lxml.etree as ET
+            root = ET.fromstring(resp.text.encode("utf-8"))
+            dates = [
+                datetime.fromisoformat(d.replace("Z", "+00:00")).date()
+                for d in root.xpath('//*[local-name()="published"]/text()')
+                if d
+            ]
+            if not dates:
+                self.logger.warning("检测时未解析到 published 日期。")
+                return False
+    
+            max_date = max(dates)
+            self.logger.info(f"检测到最新 published 日期为 {max_date}（样例: {dates[:5]}）")
+            if yesterday in dates:
+                self.logger.info(f"✅ 确认 {yesterday} 已出现在 published 中，数据已更新。")
                 return True
-            return False
+            else:
+                self.logger.info(f"⚠️ 最新 published={max_date}，仍早于昨日 {yesterday}。")
+                return False
+    
         except Exception as e:
             self.logger.warning(f"检测昨日数据失败：{e}")
             return False
+
 
     def start_requests(self):
         """
