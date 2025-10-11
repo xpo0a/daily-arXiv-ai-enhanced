@@ -239,3 +239,4 @@ class ArxivFlexibleSpider(scrapy.Spider):
         if self.paper_count == 0 and page == 1:
             self.logger.warning("No papers found in target date range with OR logic")
             self.logger.info("This might indicate that the date range has no papers matching any of the keywords")
+            self.logger.info("Consider expanding the date range or checking if the keywords are too specific")
