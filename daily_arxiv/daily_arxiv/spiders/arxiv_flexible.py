@@ -234,25 +234,7 @@ class ArxivFlexibleSpider(scrapy.Spider):
             else:
                 self.logger.info("Pagination ended, crawling completed")
                 
-        # If no papers found in target date range, try searching recent papers
+        # If no papers found in target date range, log warning
         if self.paper_count == 0 and page == 1:
-            self.logger.warning("No papers found in target date range, trying to find recent papers...")
-            # This will be handled by the fallback mechanism in the workflow
-            
-            # Also try a simpler search with broader keywords
-            self.logger.info("Trying broader keyword search...")
-            broad_keywords = ["AI", "Machine Learning", "Deep Learning", "Computer Vision", "Robotics"]
-            broad_query = generate_search_query(broad_keywords)
-            self.logger.info(f"Broad search query: {broad_query}")
-            
-            # Create a new request with broader keywords
-            broad_params = {
-                'search_query': broad_query,
-                'start': 0,
-                'max_results': self.per_page,
-                'sortBy': 'submittedDate',
-                'sortOrder': 'descending'
-            }
-            broad_url = self.base_url + urlencode(broad_params)
-            yield scrapy.Request(broad_url, callback=self.parse_api_response, 
-                               meta={'start': 0, 'page': 1, 'broad_search': True})
+            self.logger.warning("No papers found in target date range with OR logic")
+            self.logger.info("This might indicate that the date range has no papers matching any of the keywords")

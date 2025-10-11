@@ -170,7 +170,7 @@ def validate_keywords(keywords_str: str) -> Tuple[bool, str, list]:
 
 def generate_search_query(keywords: list) -> str:
     """
-    根据关键词列表生成arXiv搜索查询
+    根据关键词列表生成arXiv搜索查询（使用OR逻辑）
     
     Args:
         keywords: 关键词列表
@@ -182,10 +182,12 @@ def generate_search_query(keywords: list) -> str:
         return ""
     
     # 为每个关键词创建 (ti:"keyword" OR abs:"keyword") 格式
+    # 使用OR逻辑连接所有关键词，这样只要论文包含任意一个关键词就会被匹配
     query_parts = []
     for keyword in keywords:
         # 转义特殊字符
         escaped_keyword = keyword.replace('"', '\\"')
         query_parts.append(f'(ti:"{escaped_keyword}" OR abs:"{escaped_keyword}")')
     
+    # 使用OR连接所有关键词，这样匹配更宽松
     return ' OR '.join(query_parts)
