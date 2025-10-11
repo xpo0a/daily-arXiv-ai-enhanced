@@ -110,6 +110,7 @@ def perform_deduplication():
             return "no_data"
 
         # 收集历史多日 ID 集合
+        history_days = 7  # 向前追溯几天的数据进行对比
         history_ids = set()
         for i in range(1, history_days + 1):
             date_str = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
