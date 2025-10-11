@@ -1,0 +1,16 @@
+{
+  "secrets": {
+    "OPENAI_API_KEY": "你的API密钥",
+    "OPENAI_BASE_URL": "https://api.deepseek.com"
+  },
+  "variables": {
+    "KEYWORDS": "machine learning, deep learning, computer vision",
+    "LANGUAGE": "Chinese",
+    "MODEL_NAME": "deepseek-chat",
+    "EMAIL": "your-email@example.com",
+    "NAME": "Your Name",
+    "PER_PAGE": "200",
+    "MAX_PAGES": "10",
+    "DATE_FIELD": "published"
+  }
+}

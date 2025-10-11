@@ -1,0 +1,217 @@
+name: arXiv Daily Flexible Crawler
+
+on:
+  schedule:
+    # 每天 UTC 时间 8:00 运行（北京时间 16:00）
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: '开始日期 (格式: YYYY-MM-DD 或 today/tomorrow/yesterday 或 +/-N)'
+        required: false
+        default: 'today'
+        type: string
+      end_date:
+        description: '结束日期 (格式: YYYY-MM-DD 或 today/tomorrow/yesterday 或 +/-N)'
+        required: false
+        default: 'today'
+        type: string
+      force_run:
+        description: '强制运行（即使没有新内容）'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        uv sync
+
+    - name: Set date variables
+      id: date_setup
+      run: |
+        # 设置默认日期（手动触发时使用输入参数，定时触发时使用今天）
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          START_DATE="${{ github.event.inputs.start_date }}"
+          END_DATE="${{ github.event.inputs.end_date }}"
+        else
+          START_DATE="today"
+          END_DATE="today"
+        fi
+        
+        # 生成文件名
+        if [ "$START_DATE" = "$END_DATE" ]; then
+          FILENAME="${START_DATE}.jsonl"
+        else
+          FILENAME="${START_DATE}_to_${END_DATE}.jsonl"
+        fi
+        
+        echo "start_date=$START_DATE" >> $GITHUB_OUTPUT
+        echo "end_date=$END_DATE" >> $GITHUB_OUTPUT
+        echo "filename=$FILENAME" >> $GITHUB_OUTPUT
+        
+        echo "📅 爬取日期范围: $START_DATE 到 $END_DATE"
+        echo "📄 输出文件名: data/$FILENAME"
+
+    - name: Crawl arXiv papers
+      id: crawl_step
+      run: |
+        source .venv/bin/activate
+
+        START_DATE="${{ steps.date_setup.outputs.start_date }}"
+        END_DATE="${{ steps.date_setup.outputs.end_date }}"
+        FILENAME="${{ steps.date_setup.outputs.filename }}"
+
+        # 检查文件是否存在
+        if [ -f "data/${FILENAME}" ]; then
+            echo "🗑️ 发现数据文件已存在，删除重新生成..."
+            rm "data/${FILENAME}"
+        fi
+
+        cd daily_arxiv
+        export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        export OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
+        export LANGUAGE="${{ vars.LANGUAGE }}"
+        export KEYWORDS="${{ vars.KEYWORDS }}"
+        export MODEL_NAME="${{ vars.MODEL_NAME }}"
+        export START_DATE="$START_DATE"
+        export END_DATE="$END_DATE"
+        export PER_PAGE="${{ vars.PER_PAGE || '200' }}"
+        export MAX_PAGES="${{ vars.MAX_PAGES || '10' }}"
+        export DATE_FIELD="${{ vars.DATE_FIELD || 'published' }}"
+
+        echo "🔍 开始爬取 arXiv 论文..."
+        echo "📊 关键词: $KEYWORDS"
+        echo "📅 日期范围: $START_DATE 到 $END_DATE"
+
+        # 调用灵活爬虫
+        scrapy crawl arxiv_flexible -a start_date="$START_DATE" -a end_date="$END_DATE" -o ../data/${FILENAME}
+
+        if [ ! -f "../data/${FILENAME}" ]; then
+            echo "❌ 爬取失败，未生成数据文件"
+            exit 1
+        fi
+
+        # 检查文件是否为空
+        if [ ! -s "../data/${FILENAME}" ]; then
+            echo "⚠️ 爬取完成但未找到匹配的论文"
+            echo "crawl_success=false" >> $GITHUB_OUTPUT
+            echo "crawl_filename=${FILENAME}" >> $GITHUB_OUTPUT
+            exit 0
+        fi
+
+        echo "crawl_success=true" >> $GITHUB_OUTPUT
+        echo "crawl_filename=${FILENAME}" >> $GITHUB_OUTPUT
+        echo "✅ 爬取完成: ${FILENAME}"
+
+    - name: Check for duplicates
+      if: steps.crawl_step.outputs.crawl_success == 'true'
+      id: dedup_check
+      run: |
+        source .venv/bin/activate
+        echo "执行去重检查..."
+
+        cd daily_arxiv
+        python daily_arxiv/check_stats.py
+        dedup_exit_code=$?
+
+        echo "dedup_exit_code=$dedup_exit_code" >> $GITHUB_OUTPUT
+
+        case $dedup_exit_code in
+          0)
+            echo "has_new_content=true" >> $GITHUB_OUTPUT ;;
+          1)
+            echo "has_new_content=false" >> $GITHUB_OUTPUT
+            echo "skip_reason=no_new_content" >> $GITHUB_OUTPUT ;;
+          2)
+            echo "has_new_content=false" >> $GITHUB_OUTPUT
+            echo "skip_reason=processing_error" >> $GITHUB_OUTPUT
+            exit 1 ;;
+          *)
+            echo "has_new_content=false" >> $GITHUB_OUTPUT
+            echo "skip_reason=unknown_error" >> $GITHUB_OUTPUT
+            exit 1 ;;
+        esac
+
+    - name: AI Enhancement Processing
+      if: steps.crawl_step.outputs.crawl_success == 'true' && (steps.dedup_check.outputs.has_new_content == 'true' || github.event.inputs.force_run == 'true')
+      run: |
+        source .venv/bin/activate
+        filename=${{ steps.crawl_step.outputs.crawl_filename }}
+
+        echo "🤖 开始AI增强处理..."
+        cd ai
+        export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        export OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
+        export LANGUAGE="${{ vars.LANGUAGE }}"
+        export MODEL_NAME="${{ vars.MODEL_NAME }}"
+
+        python enhance.py --data ../data/${filename}
+
+        echo "✅ AI增强处理完成"
+
+    - name: Convert to Markdown
+      if: steps.crawl_step.outputs.crawl_success == 'true' && (steps.dedup_check.outputs.has_new_content == 'true' || github.event.inputs.force_run == 'true')
+      run: |
+        source .venv/bin/activate
+        filename=${{ steps.crawl_step.outputs.crawl_filename }}
+        export LANGUAGE="${{ vars.LANGUAGE }}"
+
+        cd to_md
+        AI_FILE="../data/${filename%.*}_AI_enhanced_${LANGUAGE}.jsonl"
+
+        if [ -f "$AI_FILE" ]; then
+          echo "📝 使用AI增强文件进行转换..."
+          python convert.py --data "$AI_FILE"
+        else
+          echo "错误：未找到AI增强文件"
+          exit 1
+        fi
+
+    - name: Update file list
+      if: steps.crawl_step.outputs.crawl_success == 'true' && (steps.dedup_check.outputs.has_new_content == 'true' || github.event.inputs.force_run == 'true')
+      run: |
+        echo "📋 更新文件列表..."
+        ls data/*.jsonl | sed 's|data/||' > assets/file-list.txt
+
+    - name: Commit & Push
+      if: steps.crawl_step.outputs.crawl_success == 'true' && (steps.dedup_check.outputs.has_new_content == 'true' || github.event.inputs.force_run == 'true')
+      run: |
+        git config --global user.email "${{ vars.EMAIL }}"
+        git config --global user.name "${{ vars.NAME }}"
+        git add .
+        if git diff --staged --quiet; then
+          echo "没有变更需要提交"
+          exit 0
+        fi
+        
+        START_DATE="${{ steps.date_setup.outputs.start_date }}"
+        END_DATE="${{ steps.date_setup.outputs.end_date }}"
+        
+        if [ "$START_DATE" = "$END_DATE" ]; then
+          COMMIT_MSG="daily update: $START_DATE arXiv papers"
+        else
+          COMMIT_MSG="daily update: $START_DATE to $END_DATE arXiv papers"
+        fi
+        
+        git commit -m "$COMMIT_MSG"
+        git push origin main
+
+    - name: Summary
+      run: |
+        if [ "${{ steps.crawl_step.outputs.crawl_success }}" = "true" ]; then
+          if [ "${{ steps.dedup_check.outputs.has_new_content }}" = "true" ] || [ "${{ github.event.inputs.force_run }}" = "true" ]; then
+            echo "✅ 爬取流程完成，包含新内容"
+          else
+            echo "ℹ️ 爬取完成但无新内容，跳过更新"
+          fi
+        else
+          echo "⚠️ 爬取完成但未找到匹配的论文"
+        fi
