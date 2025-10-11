@@ -79,7 +79,7 @@ class ArxivFlexibleSpider(scrapy.Spider):
         
         is_valid, error_msg, parsed_start, parsed_end = DateValidator.validate_date_range(start_date_str, end_date_str)
         if not is_valid:
-            self.logger.error(f"❌ 日期范围验证失败: {error_msg}")
+            self.logger.error(f"❌ Date range validation failed: {error_msg}")
             return
         
         self.start_date = parsed_start.date()
@@ -90,21 +90,30 @@ class ArxivFlexibleSpider(scrapy.Spider):
             self.start_date, self.end_date = self.end_date, self.start_date
             
         date_range_desc = DateValidator.get_date_range_description(start_date_str, end_date_str)
-        self.logger.info(f"爬取日期范围: {date_range_desc}")
+        self.logger.info(f"Crawl date range: {date_range_desc}")
 
-        # 检查是否需要等待数据更新（如果爬取的是今天或未来的日期）
+        # Check if need to wait for data update (if crawling today or future dates)
         today = datetime.utcnow().date()
         if self.start_date >= today:
             if not self.wait_until_data_ready(self.start_date):
                 return
 
-        # === 请求参数 ===
+        # === Request parameters ===
         self.base_url = "https://export.arxiv.org/api/query?"
-        self.per_page = int(os.environ.get('PER_PAGE', 200))
-        self.max_pages = int(os.environ.get('MAX_PAGES', 10))
+        self.per_page = int(os.environ.get('PER_PAGE', 50))  # Default 50 papers
+        self.max_pages = int(os.environ.get('MAX_PAGES', 1))  # Default 1 page
+        self.max_papers = int(os.environ.get('MAX_PAPERS', 50))  # Maximum paper count
         self.date_field = os.environ.get('DATE_FIELD', 'published').strip().lower()
         if self.date_field not in ('published', 'updated'):
             self.date_field = 'published'
+        
+        # Initialize counter
+        self.paper_count = 0
+
+        self.logger.info(f"Starting arXiv paper crawling...")
+        self.logger.info(f"Search query: {self.search_query}")
+        self.logger.info(f"Date range: {self.start_date} to {self.end_date}")
+        self.logger.info(f"Per page: {self.per_page}, Max pages: {self.max_pages}, Max papers: {self.max_papers}")
 
         params = {
             'search_query': self.search_query,
@@ -122,12 +131,18 @@ class ArxivFlexibleSpider(scrapy.Spider):
 
         entries = response.xpath('//*[local-name()="entry"]')
         if not entries:
-            self.logger.warning(f"第 {page} 页未返回 entry")
+            self.logger.warning(f"Page {page} returned no entries")
             return
 
         found_in_page = 0
         stop_paging = False
         for entry in entries:
+            # Check if reached maximum paper count limit
+            if self.paper_count >= self.max_papers:
+                self.logger.info(f"Reached maximum paper limit: {self.max_papers}")
+                stop_paging = True
+                break
+                
             date_text = entry.xpath(f'*[local-name()="{self.date_field}"]/text()').get()
             if not date_text:
                 continue
@@ -137,15 +152,16 @@ class ArxivFlexibleSpider(scrapy.Spider):
                 continue
             pub_date = pub_dt.date()
             
-            # 检查日期是否在目标范围内
+            # Check if date is within target range
             if pub_date > self.end_date:
                 continue
             elif self.start_date <= pub_date <= self.end_date:
                 found_in_page += 1
+                self.paper_count += 1
                 arxiv_id_url = entry.xpath('*[local-name()="id"]/text()').get() or ''
                 arxiv_id = arxiv_id_url.split('/')[-1] if arxiv_id_url else None
                 
-                # 获取分类信息
+                # Get category information
                 categories = entry.xpath('*[local-name()="category"]/@term').getall()
                 
                 yield {
@@ -162,14 +178,14 @@ class ArxivFlexibleSpider(scrapy.Spider):
                 stop_paging = True
                 break
 
-        self.logger.info(f"第 {page} 页找到 {found_in_page} 条目标日期论文")
+        self.logger.info(f"Page {page} found {found_in_page} target date papers (Total: {self.paper_count})")
 
-        # 翻页
-        if not stop_paging and len(entries) == self.per_page:
+        # Pagination logic
+        if not stop_paging and len(entries) == self.per_page and self.paper_count < self.max_papers:
             next_start = start + self.per_page
             next_page = page + 1
             if next_page > self.max_pages:
-                self.logger.warning(f"已到达 max_pages，停止翻页")
+                self.logger.warning(f"Reached max_pages limit, stopping pagination")
                 return
             next_url = self.base_url + urlencode({
                 'search_query': self.search_query,
@@ -180,4 +196,7 @@ class ArxivFlexibleSpider(scrapy.Spider):
             })
             yield scrapy.Request(next_url, callback=self.parse_api_response, meta={'start': next_start, 'page': next_page})
         else:
-            self.logger.info("翻页结束，爬取完成")
+            if self.paper_count >= self.max_papers:
+                self.logger.info(f"Reached maximum paper limit ({self.max_papers}), crawling completed")
+            else:
+                self.logger.info("Pagination ended, crawling completed")

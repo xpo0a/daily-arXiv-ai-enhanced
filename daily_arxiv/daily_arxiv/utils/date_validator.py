@@ -36,6 +36,18 @@ class DateValidator:
             return datetime.utcnow() + timedelta(days=1)
         elif date_str == 'yesterday':
             return datetime.utcnow() - timedelta(days=1)
+        elif date_str == 'last_monday':
+            # 计算上一周的周一
+            today = datetime.utcnow().date()
+            days_since_monday = today.weekday()  # 0=Monday, 6=Sunday
+            last_monday = today - timedelta(days=days_since_monday + 7)
+            return datetime.combine(last_monday, datetime.min.time())
+        elif date_str == 'last_sunday':
+            # 计算上一周的周日
+            today = datetime.utcnow().date()
+            days_since_monday = today.weekday()  # 0=Monday, 6=Sunday
+            last_sunday = today - timedelta(days=days_since_monday + 1)
+            return datetime.combine(last_sunday, datetime.min.time())
         elif re.match(r'^[+-]\d+$', date_str):
             # 相对天数，如 +1, -2
             try:
