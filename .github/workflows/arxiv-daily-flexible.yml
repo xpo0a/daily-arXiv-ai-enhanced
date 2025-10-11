@@ -182,13 +182,23 @@ jobs:
         filename=${{ steps.crawl_step.outputs.crawl_filename }}
 
         echo "🤖 Starting AI enhancement processing..."
+        echo "📊 Processing file: ${filename}"
+        echo "🔑 API Key configured: $([ -n "$OPENAI_API_KEY" ] && echo "Yes" || echo "No")"
+        echo "🌐 Base URL: $OPENAI_BASE_URL"
+        echo "🗣️ Language: $LANGUAGE"
+        echo "🤖 Model: $MODEL_NAME"
+        
         cd ai
         export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
         export OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
         export LANGUAGE="${{ vars.LANGUAGE }}"
         export MODEL_NAME="${{ vars.MODEL_NAME }}"
 
-        python enhance.py --data ../data/${filename}
+        echo "🔍 Running AI enhancement with detailed logging..."
+        python enhance.py --data ../data/${filename} 2>&1 | tee ai_enhancement.log
+        
+        echo "📋 AI Enhancement log:"
+        cat ai_enhancement.log
 
         echo "✅ AI enhancement processing completed"
 
