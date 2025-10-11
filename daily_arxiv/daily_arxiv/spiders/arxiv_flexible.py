@@ -70,6 +70,7 @@ class ArxivFlexibleSpider(scrapy.Spider):
         if not is_valid:
             self.logger.error(f"⚠️ 关键词验证失败: {error_msg}")
             return
+        self.keywords = keywords  # 保存关键词到实例变量
         self.logger.info(f"关键词: {keywords}")
         self.search_query = generate_search_query(keywords)
 
