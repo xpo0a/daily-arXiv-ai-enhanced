@@ -100,8 +100,9 @@ jobs:
         export MODEL_NAME="${{ vars.MODEL_NAME }}"
         export START_DATE="$START_DATE"
         export END_DATE="$END_DATE"
-        export PER_PAGE="${{ vars.PER_PAGE || '50' }}"
-        export MAX_PAGES="${{ vars.MAX_PAGES || '1' }}"
+        export PER_PAGE="${{ vars.PER_PAGE || '200' }}"
+        export MAX_PAGES="${{ vars.MAX_PAGES || '10' }}"
+        export MAX_PAPERS="${{ vars.MAX_PAPERS || '50' }}"
         export DATE_FIELD="${{ vars.DATE_FIELD || 'published' }}"
 
         echo "🔍 Starting arXiv paper crawling..."

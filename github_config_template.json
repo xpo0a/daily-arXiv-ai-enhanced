@@ -9,8 +9,9 @@
     "MODEL_NAME": "deepseek-chat",
     "EMAIL": "your-email@example.com",
     "NAME": "Your Name",
-    "PER_PAGE": "200",
-    "MAX_PAGES": "10",
+  "PER_PAGE": "200",
+  "MAX_PAGES": "10",
+  "MAX_PAPERS": "50",
     "DATE_FIELD": "published"
   }
 }

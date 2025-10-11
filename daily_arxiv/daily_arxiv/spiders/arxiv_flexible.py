@@ -100,9 +100,9 @@ class ArxivFlexibleSpider(scrapy.Spider):
 
         # === Request parameters ===
         self.base_url = "https://export.arxiv.org/api/query?"
-        self.per_page = int(os.environ.get('PER_PAGE', 50))  # Default 50 papers
-        self.max_pages = int(os.environ.get('MAX_PAGES', 1))  # Default 1 page
-        self.max_papers = int(os.environ.get('MAX_PAPERS', 50))  # Maximum paper count
+        self.per_page = int(os.environ.get('PER_PAGE', 200))  # Papers per API request
+        self.max_pages = int(os.environ.get('MAX_PAGES', 10))  # Maximum pages to crawl
+        self.max_papers = int(os.environ.get('MAX_PAPERS', 50))  # Maximum papers to return
         self.date_field = os.environ.get('DATE_FIELD', 'published').strip().lower()
         if self.date_field not in ('published', 'updated'):
             self.date_field = 'published'
