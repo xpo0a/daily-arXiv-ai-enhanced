@@ -167,40 +167,40 @@ class ArxivFlexibleSpider(scrapy.Spider):
             if i < 3:
                 self.logger.info(f"Entry {i+1}: date={pub_date}, target_range={self.start_date} to {self.end_date}")
             
-        # Check if date is within target range
-        if pub_date > self.end_date:
-            continue
-        elif self.start_date <= pub_date <= self.end_date:
-            found_in_page += 1
-            self.paper_count += 1
-            arxiv_id_url = entry.xpath('*[local-name()="id"]/text()').get() or ''
-            arxiv_id = arxiv_id_url.split('/')[-1] if arxiv_id_url else None
-            
-            # Get category information
-            categories = entry.xpath('*[local-name()="category"]/@term').getall()
-            
-            yield {
-                "id": arxiv_id,
-                "title": entry.xpath('*[local-name()="title"]/text()').get(),
-                "summary": entry.xpath('*[local-name()="summary"]/text()').get(),
-                "authors": entry.xpath('*[local-name()="author"]/*[local-name()="name"]/text()').getall(),
-                "categories": categories,
-                self.date_field: date_text,
-                "pdf": f"https://arxiv.org/pdf/{arxiv_id}.pdf" if arxiv_id else None,
-                "abs": f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else None
-            }
-        elif pub_date < self.start_date:
-            # If we've gone too far back in time, stop pagination
-            # But only if we haven't found any papers yet
-            if self.paper_count == 0:
-                self.logger.warning(f"No papers found in target date range, but found papers from {pub_date}")
-                # Continue searching for a few more pages to find recent papers
-                if page >= 3:  # Search up to 3 pages if no papers found
+            # Check if date is within target range
+            if pub_date > self.end_date:
+                continue
+            elif self.start_date <= pub_date <= self.end_date:
+                found_in_page += 1
+                self.paper_count += 1
+                arxiv_id_url = entry.xpath('*[local-name()="id"]/text()').get() or ''
+                arxiv_id = arxiv_id_url.split('/')[-1] if arxiv_id_url else None
+                
+                # Get category information
+                categories = entry.xpath('*[local-name()="category"]/@term').getall()
+                
+                yield {
+                    "id": arxiv_id,
+                    "title": entry.xpath('*[local-name()="title"]/text()').get(),
+                    "summary": entry.xpath('*[local-name()="summary"]/text()').get(),
+                    "authors": entry.xpath('*[local-name()="author"]/*[local-name()="name"]/text()').getall(),
+                    "categories": categories,
+                    self.date_field: date_text,
+                    "pdf": f"https://arxiv.org/pdf/{arxiv_id}.pdf" if arxiv_id else None,
+                    "abs": f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else None
+                }
+            elif pub_date < self.start_date:
+                # If we've gone too far back in time, stop pagination
+                # But only if we haven't found any papers yet
+                if self.paper_count == 0:
+                    self.logger.warning(f"No papers found in target date range, but found papers from {pub_date}")
+                    # Continue searching for a few more pages to find recent papers
+                    if page >= 3:  # Search up to 3 pages if no papers found
+                        stop_paging = True
+                        break
+                else:
                     stop_paging = True
                     break
-            else:
-                stop_paging = True
-                break
 
         self.logger.info(f"Page {page} found {found_in_page} target date papers (Total: {self.paper_count})")
         
