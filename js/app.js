@@ -531,13 +531,16 @@ function selectLanguageForDate(date, preferredLanguage = null) {
 
 async function fetchAvailableDates() {
   try {
+    console.log('Fetching file list from assets/file-list.txt...');
     const response = await fetch('assets/file-list.txt');
     if (!response.ok) {
-      console.error('Error fetching file list:', response.status);
+      console.error('Error fetching file list:', response.status, response.statusText);
       return [];
     }
     const text = await response.text();
+    console.log('File list content:', text);
     const files = text.trim().split('\n');
+    console.log('Parsed files:', files);
 
     // 支持多种格式的AI增强文件
     const singleDateRegex = /(\d{4}-\d{2}-\d{2})_AI_enhanced_(English|Chinese)\.jsonl/;
@@ -588,6 +591,9 @@ async function fetchAvailableDates() {
     window.dateLanguageMap = dateLanguageMap;
     availableDates = [...new Set(dates)];
     
+    console.log('Final available dates before sorting:', availableDates);
+    console.log('Date language map:', dateLanguageMap);
+    
     // 自定义排序函数，处理日期范围格式
     availableDates.sort((a, b) => {
       // 提取用于排序的日期
@@ -604,6 +610,9 @@ async function fetchAvailableDates() {
       
       return getSortDate(b) - getSortDate(a);
     });
+
+    console.log('Final available dates after sorting:', availableDates);
+    console.log('Total available dates:', availableDates.length);
 
     initDatePicker(); // Assuming this function uses availableDates
 
@@ -691,6 +700,10 @@ function toggleRangeMode() {
 }
 
 async function loadPapersByDate(date) {
+  console.log('=== loadPapersByDate called ===');
+  console.log('Input date:', date);
+  console.log('Available dates:', availableDates);
+  
   currentDate = date;
   document.getElementById('currentDate').textContent = formatDate(date);
   
