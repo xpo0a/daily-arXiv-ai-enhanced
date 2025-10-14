@@ -539,28 +539,71 @@ async function fetchAvailableDates() {
     const text = await response.text();
     const files = text.trim().split('\n');
 
-    const dateRegex = /(\d{4}-\d{2}-\d{2})_AI_enhanced_(English|Chinese)\.jsonl/;
+    // 支持多种格式的AI增强文件
+    const singleDateRegex = /(\d{4}-\d{2}-\d{2})_AI_enhanced_(English|Chinese)\.jsonl/;
+    const dateRangeRegex = /recent_(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})_AI_enhanced_(English|Chinese)\.jsonl/;
     const dateLanguageMap = new Map(); // Store date -> available languages
     const dates = [];
     
     files.forEach(file => {
-      const match = file.match(dateRegex);
+      console.log('Processing file:', file);
+      
+      // 先尝试匹配日期范围格式（更具体的模式）
+      let match = file.match(dateRangeRegex);
+      if (match && match[1] && match[2] && match[3]) {
+        const startDate = match[1];
+        const endDate = match[2];
+        const language = match[3];
+        console.log('Matched date range file:', file, 'Start:', startDate, 'End:', endDate, 'Language:', language);
+        
+        // 为日期范围创建一个特殊的键，使用完整的日期范围
+        const rangeKey = `${startDate}_to_${endDate}`;
+        if (!dateLanguageMap.has(rangeKey)) {
+          dateLanguageMap.set(rangeKey, []);
+          dates.push(rangeKey);
+        }
+        dateLanguageMap.get(rangeKey).push(language);
+        return;
+      }
+      
+      // 再尝试匹配单个日期格式
+      match = file.match(singleDateRegex);
       if (match && match[1] && match[2]) {
         const date = match[1];
         const language = match[2];
+        console.log('Matched single date file:', file, 'Date:', date, 'Language:', language);
         
         if (!dateLanguageMap.has(date)) {
           dateLanguageMap.set(date, []);
           dates.push(date);
         }
         dateLanguageMap.get(date).push(language);
+        return;
       }
+      
+      console.log('File did not match any regex:', file);
     });
     
     // Store the language mapping globally for later use
     window.dateLanguageMap = dateLanguageMap;
     availableDates = [...new Set(dates)];
-    availableDates.sort((a, b) => new Date(b) - new Date(a));
+    
+    // 自定义排序函数，处理日期范围格式
+    availableDates.sort((a, b) => {
+      // 提取用于排序的日期
+      const getSortDate = (dateStr) => {
+        if (dateStr.includes('_to_')) {
+          // 对于日期范围，使用结束日期进行排序
+          const endDate = dateStr.split('_to_')[1];
+          return new Date(endDate);
+        } else {
+          // 对于单个日期，直接使用
+          return new Date(dateStr);
+        }
+      };
+      
+      return getSortDate(b) - getSortDate(a);
+    });
 
     initDatePicker(); // Assuming this function uses availableDates
 
@@ -594,8 +637,18 @@ function initDatePicker() {
         const dateStr = date.getFullYear() + "-" +
                         String(date.getMonth() + 1).padStart(2, '0') + "-" +
                         String(date.getDate()).padStart(2, '0');
-        // 在 availableDates[0] 之后的日期全部返回 false，否则返回 true
-        return dateStr <= availableDates[0];
+        
+        // 检查这个日期是否在可用的日期范围内
+        return availableDates.some(availableDate => {
+          if (availableDate.includes('_to_')) {
+            // 对于日期范围，检查是否在范围内
+            const [startDate, endDate] = availableDate.split('_to_');
+            return dateStr >= startDate && dateStr <= endDate;
+          } else {
+            // 对于单个日期，直接比较
+            return dateStr === availableDate;
+          }
+        });
       }
     ],
     onChange: function(selectedDates, dateStr) {
@@ -659,7 +712,22 @@ async function loadPapersByDate(date) {
   
   try {
     const selectedLanguage = selectLanguageForDate(date);
-    const response = await fetch(`data/${date}_AI_enhanced_${selectedLanguage}.jsonl`);
+    let fileName;
+    
+    // 检查是否是日期范围格式
+    if (date.includes('_to_')) {
+      fileName = `data/recent_${date}_AI_enhanced_${selectedLanguage}.jsonl`;
+    } else {
+      fileName = `data/${date}_AI_enhanced_${selectedLanguage}.jsonl`;
+    }
+    
+    console.log('Attempting to load file:', fileName);
+    console.log('Selected date:', date);
+    console.log('Selected language:', selectedLanguage);
+    console.log('Available dates:', availableDates);
+    console.log('Date language map:', window.dateLanguageMap);
+    
+    const response = await fetch(fileName);
     // 如果文件不存在（例如返回 404），在论文展示区域提示没有论文
     if (!response.ok) {
       if (response.status === 404) {
