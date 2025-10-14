@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Loading Test</title>
+</head>
+<body>
+    <h1>File Loading Test</h1>
+    <div id="result"></div>
+    
+    <script>
+        async function testFileLoading() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                console.log('Testing file-list.txt loading...');
+                const response = await fetch('assets/file-list.txt');
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+                
+                if (!response.ok) {
+                    resultDiv.innerHTML = `<p style="color: red;">Error: ${response.status} ${response.statusText}</p>`;
+                    return;
+                }
+                
+                const text = await response.text();
+                console.log('File content:', text);
+                
+                const files = text.trim().split('\n');
+                console.log('Parsed files:', files);
+                
+                resultDiv.innerHTML = `
+                    <h2>File List Content:</h2>
+                    <pre>${text}</pre>
+                    <h2>Parsed Files:</h2>
+                    <ul>
+                        ${files.map(file => `<li>${file}</li>`).join('')}
+                    </ul>
+                `;
+                
+                // Test AI enhanced file loading
+                const aiFiles = files.filter(file => file.includes('_AI_enhanced_'));
+                console.log('AI enhanced files:', aiFiles);
+                
+                if (aiFiles.length > 0) {
+                    const testFile = aiFiles[0];
+                    console.log('Testing AI file loading:', testFile);
+                    
+                    const aiResponse = await fetch(`data/${testFile}`);
+                    console.log('AI file response status:', aiResponse.status);
+                    
+                    if (aiResponse.ok) {
+                        const aiText = await aiResponse.text();
+                        console.log('AI file content length:', aiText.length);
+                        resultDiv.innerHTML += `
+                            <h2>AI File Test (${testFile}):</h2>
+                            <p style="color: green;">Successfully loaded ${aiText.length} characters</p>
+                            <pre>${aiText.substring(0, 500)}...</pre>
+                        `;
+                    } else {
+                        resultDiv.innerHTML += `
+                            <h2>AI File Test (${testFile}):</h2>
+                            <p style="color: red;">Error: ${aiResponse.status} ${aiResponse.statusText}</p>
+                        `;
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Run test when page loads
+        window.addEventListener('load', testFileLoading);
+    </script>
+</body>
+</html>
