@@ -68,11 +68,31 @@ jobs:
           END_DATE="today"
         fi
         
-        # 生成文件名
+        # 生成文件名 - 将相对日期转换为实际日期
         if [ "$START_DATE" = "$END_DATE" ]; then
-          FILENAME="${START_DATE}.jsonl"
+          if [ "$START_DATE" = "today" ]; then
+            ACTUAL_DATE=$(date -u +%Y-%m-%d)
+            FILENAME="${ACTUAL_DATE}.jsonl"
+          elif [ "$START_DATE" = "yesterday" ]; then
+            ACTUAL_DATE=$(date -u -d "yesterday" +%Y-%m-%d)
+            FILENAME="${ACTUAL_DATE}.jsonl"
+          elif [ "$START_DATE" = "last_monday" ]; then
+            ACTUAL_DATE=$(date -u -d "last monday" +%Y-%m-%d)
+            FILENAME="${ACTUAL_DATE}.jsonl"
+          elif [ "$START_DATE" = "last_sunday" ]; then
+            ACTUAL_DATE=$(date -u -d "last sunday" +%Y-%m-%d)
+            FILENAME="${ACTUAL_DATE}.jsonl"
+          else
+            FILENAME="${START_DATE}.jsonl"
+          fi
         else
-          FILENAME="${START_DATE}_to_${END_DATE}.jsonl"
+          if [ "$START_DATE" = "last_monday" ] && [ "$END_DATE" = "last_sunday" ]; then
+            START_ACTUAL=$(date -u -d "last monday" +%Y-%m-%d)
+            END_ACTUAL=$(date -u -d "last sunday" +%Y-%m-%d)
+            FILENAME="recent_${START_ACTUAL}_to_${END_ACTUAL}.jsonl"
+          else
+            FILENAME="${START_DATE}_to_${END_DATE}.jsonl"
+          fi
         fi
         
         echo "start_date=$START_DATE" >> $GITHUB_OUTPUT

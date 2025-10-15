@@ -545,6 +545,7 @@ async function fetchAvailableDates() {
     // 支持多种格式的AI增强文件
     const singleDateRegex = /(\d{4}-\d{2}-\d{2})_AI_enhanced_(English|Chinese)\.jsonl/;
     const dateRangeRegex = /recent_(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})_AI_enhanced_(English|Chinese)\.jsonl/;
+    const legacyDateRangeRegex = /(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})_AI_enhanced_(English|Chinese)\.jsonl/;
     const dateLanguageMap = new Map(); // Store date -> available languages
     const dates = [];
     
@@ -569,7 +570,25 @@ async function fetchAvailableDates() {
         return;
       }
       
-      // 再尝试匹配单个日期格式
+      // 再尝试匹配legacy日期范围格式
+      match = file.match(legacyDateRangeRegex);
+      if (match && match[1] && match[2] && match[3]) {
+        const startDate = match[1];
+        const endDate = match[2];
+        const language = match[3];
+        console.log('Matched legacy date range file:', file, 'Start:', startDate, 'End:', endDate, 'Language:', language);
+        
+        // 为日期范围创建一个特殊的键，使用完整的日期范围
+        const rangeKey = `${startDate}_to_${endDate}`;
+        if (!dateLanguageMap.has(rangeKey)) {
+          dateLanguageMap.set(rangeKey, []);
+          dates.push(rangeKey);
+        }
+        dateLanguageMap.get(rangeKey).push(language);
+        return;
+      }
+      
+      // 最后尝试匹配单个日期格式
       match = file.match(singleDateRegex);
       if (match && match[1] && match[2]) {
         const date = match[1];
