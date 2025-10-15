@@ -639,7 +639,7 @@ function initDatePicker() {
   flatpickrInstance = flatpickr(datepickerInput, {
     inline: true,
     dateFormat: "Y-m-d",
-    defaultDate: availableDates[0],
+    defaultDate: availableDates[0] ? (availableDates[0].includes('_to_') ? availableDates[0].split('_to_')[0] : availableDates[0]) : null,
     enable: [
       function(date) {
         // 只启用有效日期
@@ -724,18 +724,38 @@ async function loadPapersByDate(date) {
   `;
   
   try {
-    const selectedLanguage = selectLanguageForDate(date);
+    // 查找包含该日期的可用日期键
+    let targetDateKey = date;
+    
+    // 如果输入的是单个日期，需要找到包含该日期的日期范围
+    if (!date.includes('_to_')) {
+      // 查找包含该日期的日期范围
+      const matchingRange = availableDates.find(availableDate => {
+        if (availableDate.includes('_to_')) {
+          const [startDate, endDate] = availableDate.split('_to_');
+          return date >= startDate && date <= endDate;
+        }
+        return availableDate === date;
+      });
+      
+      if (matchingRange) {
+        targetDateKey = matchingRange;
+      }
+    }
+    
+    const selectedLanguage = selectLanguageForDate(targetDateKey);
     let fileName;
     
     // 检查是否是日期范围格式
-    if (date.includes('_to_')) {
-      fileName = `data/recent_${date}_AI_enhanced_${selectedLanguage}.jsonl`;
+    if (targetDateKey.includes('_to_')) {
+      fileName = `data/recent_${targetDateKey}_AI_enhanced_${selectedLanguage}.jsonl`;
     } else {
-      fileName = `data/${date}_AI_enhanced_${selectedLanguage}.jsonl`;
+      fileName = `data/${targetDateKey}_AI_enhanced_${selectedLanguage}.jsonl`;
     }
     
     console.log('Attempting to load file:', fileName);
     console.log('Selected date:', date);
+    console.log('Target date key:', targetDateKey);
     console.log('Selected language:', selectedLanguage);
     console.log('Available dates:', availableDates);
     console.log('Date language map:', window.dateLanguageMap);
@@ -1460,7 +1480,27 @@ function toggleView() {
 }
 
 function formatDate(dateString) {
+  // 处理日期范围格式 (如 "2025-09-20_to_2025-10-11")
+  if (dateString.includes('_to_')) {
+    const [startDate, endDate] = dateString.split('_to_');
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return `${start.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric'
+    })} - ${end.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric'
+    })}`;
+  }
+  
+  // 处理单个日期格式
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) {
+    return dateString; // 如果日期无效，返回原始字符串
+  }
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'numeric',
