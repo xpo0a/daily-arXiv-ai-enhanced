@@ -788,7 +788,15 @@ async function loadPapersByDate(date) {
       return;
     }
     
-    paperData = parseJsonlData(text, date);
+    // 解析数据并过滤指定日期的文章
+    const allPaperData = parseJsonlData(text, targetDateKey);
+    
+    // 如果用户选择的是单个日期，需要过滤出该日期的文章
+    if (!date.includes('_to_')) {
+      paperData = filterPapersByDate(allPaperData, date);
+    } else {
+      paperData = allPaperData;
+    }
     
     const categories = getAllCategories(paperData);
     
@@ -838,6 +846,7 @@ function parseJsonlData(jsonlText, date) {
         details: paper.summary || '',
         date: date,
         id: paper.id,
+        published: paper.published, // 保存原始发布日期
         motivation: paper.AI && paper.AI.motivation ? paper.AI.motivation : '',
         method: paper.AI && paper.AI.method ? paper.AI.method : '',
         result: paper.AI && paper.AI.result ? paper.AI.result : '',
@@ -849,6 +858,42 @@ function parseJsonlData(jsonlText, date) {
   });
   
   return result;
+}
+
+function filterPapersByDate(allPaperData, targetDate) {
+  const filteredData = {};
+  
+  Object.keys(allPaperData).forEach(category => {
+    const papers = allPaperData[category];
+    const filteredPapers = papers.filter(paper => {
+      if (!paper.published) {
+        return false;
+      }
+      
+      try {
+        // 解析发布日期
+        const pubDate = new Date(paper.published);
+        const targetDateObj = new Date(targetDate);
+        
+        // 比较日期（忽略时间部分）
+        const pubDateStr = pubDate.toISOString().split('T')[0];
+        const targetDateStr = targetDateObj.toISOString().split('T')[0];
+        
+        return pubDateStr === targetDateStr;
+      } catch (error) {
+        console.error('日期解析失败:', paper.published, error);
+        return false;
+      }
+    });
+    
+    if (filteredPapers.length > 0) {
+      filteredData[category] = filteredPapers;
+    }
+  });
+  
+  console.log(`过滤日期 ${targetDate}: 从 ${Object.values(allPaperData).flat().length} 篇文章中过滤出 ${Object.values(filteredData).flat().length} 篇`);
+  
+  return filteredData;
 }
 
 // 获取所有类别并按偏好排序
