@@ -60,10 +60,45 @@ def save_papers_data(papers, file_path):
         print(f"Error saving {file_path}: {e}", file=sys.stderr)
         return False
 
+def get_all_historical_paper_ids(data_dir="../data", days_back=30):
+    """
+    获取历史所有论文的ID集合，用于去重
+    Get all historical paper IDs for deduplication
+    
+    Args:
+        data_dir (str): 数据目录路径
+        days_back (int): 向前追溯的天数
+    
+    Returns:
+        set: 历史论文ID集合
+    """
+    history_ids = set()
+    
+    if not os.path.exists(data_dir):
+        return history_ids
+    
+    # 获取所有jsonl文件（排除AI增强文件）
+    jsonl_files = [f for f in os.listdir(data_dir) if f.endswith('.jsonl') and not f.endswith('_AI_enhanced_')]
+    
+    for file_name in jsonl_files:
+        file_path = os.path.join(data_dir, file_name)
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        data = json.loads(line)
+                        paper_id = data.get('id', '')
+                        if paper_id:
+                            history_ids.add(paper_id)
+        except Exception as e:
+            print(f"Error reading {file_name}: {e}", file=sys.stderr)
+    
+    return history_ids
+
 def perform_deduplication():
     """
-    执行多日去重：删除与历史多日重复的论文条目，保留新内容
-    Perform deduplication over multiple past days
+    执行智能去重：删除与历史所有数据重复的论文条目，保留新内容
+    Perform intelligent deduplication against all historical data
     
     Returns:
         str: 去重状态 / Deduplication status
@@ -109,16 +144,27 @@ def perform_deduplication():
         if not today_papers:
             return "no_data"
 
-        # 收集历史多日 ID 集合
-        history_days = 7  # 向前追溯几天的数据进行对比
-        history_ids = set()
-        for i in range(1, history_days + 1):
-            date_str = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
-            history_file = f"../data/{date_str}.jsonl"
-            _, past_ids = load_papers_data(history_file)
-            history_ids.update(past_ids)
+        # 获取所有历史论文ID（排除当前文件）
+        all_history_ids = get_all_historical_paper_ids()
+        
+        # 从历史ID中排除当前文件的ID，避免自重复
+        current_file_ids = set()
+        try:
+            with open(today_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        data = json.loads(line)
+                        paper_id = data.get('id', '')
+                        if paper_id:
+                            current_file_ids.add(paper_id)
+        except Exception as e:
+            print(f"Error reading current file for self-deduplication: {e}", file=sys.stderr)
+        
+        # 排除当前文件中的ID，只保留真正的历史ID
+        history_ids = all_history_ids - current_file_ids
 
-        print(f"History {history_days} days deduplication library size: {len(history_ids)}", file=sys.stderr)
+        print(f"Historical deduplication library size: {len(history_ids)}", file=sys.stderr)
+        print(f"Current file papers: {len(current_file_ids)}", file=sys.stderr)
 
         duplicate_ids = today_ids & history_ids
 

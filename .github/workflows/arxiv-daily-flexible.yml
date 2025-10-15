@@ -1,28 +1,29 @@
-name: arXiv Weekly Flexible Crawler
+name: arXiv Bi-daily Flexible Crawler
 
 on:
   schedule:
-    # 每周一 UTC 时间 8:00 运行（北京时间 16:00），爬取上一周的文章
-    - cron: "0 8 * * 1"
+    # 每两天 UTC 时间 8:00 运行（北京时间 16:00），爬取当天的文章
+    - cron: "0 8 */2 * *"
   workflow_dispatch:
     inputs:
       crawl_mode:
         description: 'Crawl mode'
         required: false
-        default: 'last_week'
+        default: 'today'
         type: choice
         options:
+          - 'today'
           - 'last_week'
           - 'custom_date'
       start_date:
         description: 'Start date (format: YYYY-MM-DD or today/tomorrow/yesterday or +/-N)'
         required: false
-        default: 'last_monday'
+        default: 'today'
         type: string
       end_date:
         description: 'End date (format: YYYY-MM-DD or today/tomorrow/yesterday or +/-N)'
         required: false
-        default: 'last_sunday'
+        default: 'today'
         type: string
       force_run:
         description: 'Force run (even if no new content)'
@@ -48,7 +49,11 @@ jobs:
         # 设置日期范围
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           # 手动触发
-          if [ "${{ github.event.inputs.crawl_mode }}" = "last_week" ]; then
+          if [ "${{ github.event.inputs.crawl_mode }}" = "today" ]; then
+            # 爬取当天
+            START_DATE="today"
+            END_DATE="today"
+          elif [ "${{ github.event.inputs.crawl_mode }}" = "last_week" ]; then
             # 计算上一周的范围（周一到周日）
             START_DATE="last_monday"
             END_DATE="last_sunday"
@@ -58,9 +63,9 @@ jobs:
             END_DATE="${{ github.event.inputs.end_date }}"
           fi
         else
-          # 定时触发（每周一），爬取上一周
-          START_DATE="last_monday"
-          END_DATE="last_sunday"
+          # 定时触发（每两天），爬取当天
+          START_DATE="today"
+          END_DATE="today"
         fi
         
         # 生成文件名
@@ -241,9 +246,9 @@ jobs:
         END_DATE="${{ steps.date_setup.outputs.end_date }}"
         
         if [ "$START_DATE" = "$END_DATE" ]; then
-          COMMIT_MSG="weekly update: $START_DATE arXiv papers"
+          COMMIT_MSG="bi-daily update: $START_DATE arXiv papers"
         else
-          COMMIT_MSG="weekly update: $START_DATE to $END_DATE arXiv papers"
+          COMMIT_MSG="bi-daily update: $START_DATE to $END_DATE arXiv papers"
         fi
         
         git commit -m "$COMMIT_MSG"

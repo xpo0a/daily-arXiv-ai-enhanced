@@ -594,7 +594,7 @@ async function fetchAvailableDates() {
     console.log('Final available dates before sorting:', availableDates);
     console.log('Date language map:', dateLanguageMap);
     
-    // 自定义排序函数，处理日期范围格式
+    // 自定义排序函数，处理日期范围格式，优先显示最新数据
     availableDates.sort((a, b) => {
       // 提取用于排序的日期
       const getSortDate = (dateStr) => {
@@ -608,8 +608,26 @@ async function fetchAvailableDates() {
         }
       };
       
+      // 降序排序，最新的在前
       return getSortDate(b) - getSortDate(a);
     });
+    
+    // 如果有今天的日期，优先显示今天的
+    const today = new Date().toISOString().split('T')[0];
+    const todayIndex = availableDates.findIndex(date => {
+      if (date.includes('_to_')) {
+        const [startDate, endDate] = date.split('_to_');
+        return startDate <= today && today <= endDate;
+      } else {
+        return date === today;
+      }
+    });
+    
+    if (todayIndex > 0) {
+      // 将今天的日期移到最前面
+      const todayDate = availableDates.splice(todayIndex, 1)[0];
+      availableDates.unshift(todayDate);
+    }
 
     console.log('Final available dates after sorting:', availableDates);
     console.log('Total available dates:', availableDates.length);
